@@ -11,7 +11,14 @@ add_definitions(-DHAVE_SDL2)
 add_definitions(-DHAVE_OPENGL)
 
 find_package(OpenGL REQUIRED)
-file(GLOB SOURCE_FILE "${CMAKE_SOURCE_DIR}/*.cpp" "${CMAKE_SOURCE_DIR}/*.hpp")
+file(GLOB_RECURSE SOURCE_FILE "${CMAKE_SOURCE_DIR}/*.*" )
+list(FILTER SOURCE_FILE EXCLUDE REGEX ".*/cmake-.*|.*/\\.idea/.*|.*/\\.git/.*|.*\\.gitignore")
+message("\n")
+foreach(source ${SOURCE_FILE})
+    message(STATUS "add source: ${source}")
+endforeach()
+message("\n")
+
 add_library(${PROJECT_NAME} SHARED ${SOURCE_FILE})
 
 #set(LIB_OUT_PATH "${CMAKE_BINARY_DIR}/${PROJECT_NAME}/lib")
@@ -78,7 +85,7 @@ if (NOT EXISTS ${TARGET_INCLUDE_PATH})
 endif ()
 
 #set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/${PROJECT_NAME}/")
-
+#
 # Install the library and header files
 #install(TARGETS ${PROJECT_NAME}
 #        LIBRARY DESTINATION lib
@@ -89,7 +96,13 @@ endif ()
 #install(DIRECTORY ${TARGET_INCLUDE_PATH} DESTINATION include)
 
 # 查找所有 .hpp 文件
-file(GLOB HEADER_FILES "${CMAKE_SOURCE_DIR}/*.hpp")
+file(GLOB_RECURSE HEADER_FILES "${CMAKE_SOURCE_DIR}/*.hpp")
+list(FILTER HEADER_FILES EXCLUDE REGEX ".*/cmake-.*|.*/\\.idea/.*|.*/\\.git/.*|.*/\\.gitignore")
+
+foreach(source ${HEADER_FILES})
+    message(STATUS "copy file: ${source}")
+endforeach()
+
 # 复制这些文件到指定目录
 file(COPY ${HEADER_FILES} DESTINATION ${LIB_OUT_ROOT_PATH}/include/)
 

@@ -1,4 +1,5 @@
 #include "xsonic.hpp"
+#include "xsonicprivate.hpp"
 
 static inline constexpr auto SINC_FILTER_POINTS{12},
 SINC_TABLE_SIZE{601};
@@ -54,26 +55,44 @@ static inline constexpr int16_t sincTable[SINC_TABLE_SIZE] = {
         -12, -10, -9, -7, -6, -4, -3, -2, -2, -1, -1, 0, 0, 0, 0, 0, 0, 0
 };
 
-void XSonic::scaleSamples(int16_t *samples,
+void SonicPrivate::Close(){
+    m_inputBuffer_.clear();
+    m_outputBuffer_.clear();
+    m_pitchBuffer_.clear();
+    m_downSampleBuffer_.clear();
+    d= {};
+}
+
+void SonicPrivate::scaleSamples(int16_t *samples,
                           const int &numSamples,
                           const float & volume) {
 
     const auto fixedPointVolume{static_cast<int>(volume * 4096.0f)};
-    auto numSamples_{numSamples};
+    //auto numSamples_{numSamples};
 
-    while(numSamples_--) {
-        const auto sample{*samples};
-        auto value{(sample * fixedPointVolume) >> 12};
+    for (int i {}; i < numSamples; i++) {
+        auto value{samples[i] * fixedPointVolume >> 12};
         if(value > 32767) {
             value = 32767;
         }else if(value < -32767) {
             value = -32767;
         }else{}
-        *samples++ = static_cast<int16_t>(value);
+        samples[i] = static_cast<int16_t>(value);;
     }
+
+    // while(numSamples_--) {
+    //     const auto sample{*samples};
+    //     auto value{sample * fixedPointVolume >> 12};
+    //     if(value > 32767) {
+    //         value = 32767;
+    //     }else if(value < -32767) {
+    //         value = -32767;
+    //     }else{}
+    //     *samples++ = static_cast<int16_t>(value);
+    // }
 }
 
-bool XSonic::allocateStreamBuffers(const int &sampleRate,const int &numChannels) {
+bool SonicPrivate::allocateStreamBuffers(const int &sampleRate,const int &numChannels) {
 
     if (sampleRate <= 0 || numChannels <= 0){
         return {};
@@ -84,31 +103,31 @@ bool XSonic::allocateStreamBuffers(const int &sampleRate,const int &numChannels)
                 maxPeriod{sampleRate/SONIC_MIN_PITCH_},
                 maxRequired{2 * maxPeriod};
 
-    m_inputBufferSize = m_outputBufferSize = m_pitchBufferSize = maxRequired;
+    d.m_inputBufferSize_ = d.m_outputBufferSize_ = d.m_pitchBufferSize_ = maxRequired;
     try {
         const auto alloc_size{maxRequired * numChannels};
-        CHECK_EXC(m_inputBuffer.resize(alloc_size));
-        CHECK_EXC(m_outputBuffer.resize(alloc_size));
-        CHECK_EXC(m_pitchBuffer.resize(alloc_size));
-        CHECK_EXC(m_downSampleBuffer.resize(maxRequired));
+        CHECK_EXC(m_inputBuffer_.resize(alloc_size));
+        CHECK_EXC(m_outputBuffer_.resize(alloc_size));
+        CHECK_EXC(m_pitchBuffer_.resize(alloc_size));
+        CHECK_EXC(m_downSampleBuffer_.resize(maxRequired));
     } catch (const std::exception &e) {
         Close();
         std::cerr << e.what() << "\n";
         return {};
     }
 
-    m_sampleRate = sampleRate;
-    m_numChannels = numChannels;
-    m_minPeriod = minPeriod;
-    m_maxPeriod = maxPeriod;
-    m_maxRequired = maxRequired;
-    m_speed = m_pitch = m_volume = m_rate = 1.0f;
-    m_oldRatePosition = m_newRatePosition = m_useChordPitch = m_quality = m_prevPeriod = 0;
-    m_avePower = 50.0f;
+    d.m_sampleRate_ = sampleRate;
+    d.m_numChannels_ = numChannels;
+    d.m_minPeriod_ = minPeriod;
+    d.m_maxPeriod_ = maxPeriod;
+    d.m_maxRequired_ = maxRequired;
+    d.m_speed_ = d.m_pitch_ = d.m_volume_ = d.m_rate_ = 1.0f;
+    d.m_oldRatePosition_ = d.m_newRatePosition_ = d.m_useChordPitch_ = d.m_quality_ = d.m_prevPeriod_ = 0;
+    d.m_avePower_ = 50.0f;
     return true;
 }
 
-bool XSonic::sonicCreateStream(const int &sampleRate,const int &numChannels){
+bool SonicPrivate::sonicCreateStream(const int &sampleRate,const int &numChannels){
 
     if (!allocateStreamBuffers(sampleRate,numChannels)){
         return {};
@@ -116,27 +135,27 @@ bool XSonic::sonicCreateStream(const int &sampleRate,const int &numChannels){
     return true;
 }
 
-bool XSonic::enlargeOutputBufferIfNeeded(const int &numSamples) {
+bool SonicPrivate::enlargeOutputBufferIfNeeded(const int &numSamples) {
 
-    if(m_numOutputSamples + numSamples > m_outputBufferSize) {
-        m_outputBufferSize += (m_outputBufferSize >> 1) + numSamples;
-        m_outputBuffer.clear();
-        TRY_CATCH(CHECK_EXC(m_outputBuffer.resize(m_outputBufferSize * m_numChannels)),return {});
+    if(d.m_numOutputSamples_ + numSamples > d.m_outputBufferSize_) {
+        d.m_outputBufferSize_ += (d.m_outputBufferSize_ >> 1) + numSamples;
+        m_outputBuffer_.clear();
+        TRY_CATCH(CHECK_EXC(m_outputBuffer_.resize(d.m_outputBufferSize_ * d.m_numChannels_)),return {});
     }
     return true;
 }
 
-bool XSonic::enlargeInputBufferIfNeeded(const int &numSamples) {
+bool SonicPrivate::enlargeInputBufferIfNeeded(const int &numSamples) {
 
-    if(m_numInputSamples + numSamples > m_inputBufferSize) {
-        m_inputBufferSize += (m_inputBufferSize >> 1) + numSamples;
-        m_inputBuffer.clear();
-        TRY_CATCH(CHECK_EXC(m_inputBuffer.resize(m_inputBufferSize * m_numChannels)),return {});
+    if(d.m_numInputSamples_ + numSamples > d.m_inputBufferSize_) {
+        d.m_inputBufferSize_ += (d.m_inputBufferSize_ >> 1) + numSamples;
+        m_inputBuffer_.clear();
+        TRY_CATCH(CHECK_EXC(m_inputBuffer_.resize(d.m_inputBufferSize_ * d.m_numChannels_)),return {});
     }
     return true;
 }
 
-bool XSonic::addDoubleSamplesToInputBuffer(const double *samples, const int &numSamples) {
+bool SonicPrivate::addDoubleSamplesToInputBuffer(const double *samples, const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -146,8 +165,8 @@ bool XSonic::addDoubleSamplesToInputBuffer(const double *samples, const int &num
         return {};
     }
 
-    const auto count{numSamples * m_numChannels};
-    const auto buffer{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
+    const auto count{numSamples * d.m_numChannels_};
+    const auto buffer{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
 
     for(int i{}; i < count; ++i) {
         auto sample{samples[i]};
@@ -162,11 +181,11 @@ bool XSonic::addDoubleSamplesToInputBuffer(const double *samples, const int &num
         buffer[i] = static_cast<int16_t>(std::round(sample * 32767.0));
     }
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-bool XSonic::addS64SamplesToInputBuffer(const int64_t *samples, const int &numSamples) {
+bool SonicPrivate::addS64SamplesToInputBuffer(const int64_t *samples,const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -176,8 +195,8 @@ bool XSonic::addS64SamplesToInputBuffer(const int64_t *samples, const int &numSa
         return {};
     }
 
-    const auto count{numSamples * m_numChannels};
-    const auto buffer{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
+    const auto count{numSamples * d.m_numChannels_};
+    const auto buffer{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
 
     for(int i{}; i < count; ++i) {
         const auto v1{samples[i] + (1LL << 47)},
@@ -185,11 +204,11 @@ bool XSonic::addS64SamplesToInputBuffer(const int64_t *samples, const int &numSa
         buffer[i] = static_cast<int16_t>(v2);
     }
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-bool XSonic::addU64SamplesToInputBuffer(const uint64_t *samples, const int &numSamples) {
+bool SonicPrivate::addU64SamplesToInputBuffer(const uint64_t *samples, const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -199,8 +218,8 @@ bool XSonic::addU64SamplesToInputBuffer(const uint64_t *samples, const int &numS
         return {};
     }
 
-    const auto count{numSamples * m_numChannels};
-    const auto buffer{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
+    const auto count{numSamples * d.m_numChannels_};
+    const auto buffer{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
 
     for(int i{}; i < count; ++i) {
         const auto v1{samples[i] - 9223372036854775808ULL},
@@ -208,11 +227,11 @@ bool XSonic::addU64SamplesToInputBuffer(const uint64_t *samples, const int &numS
         buffer[i] = static_cast<int16_t>(v2);
     }
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-bool XSonic::addFloatSamplesToInputBuffer(const float *samples,const int &numSamples) {
+bool SonicPrivate::addFloatSamplesToInputBuffer(const float *samples,const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -222,19 +241,19 @@ bool XSonic::addFloatSamplesToInputBuffer(const float *samples,const int &numSam
         return {};
     }
 
-    const auto count{numSamples * m_numChannels};
-    const auto buffer{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
+    const auto count{numSamples * d.m_numChannels_};
+    const auto buffer{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
 
     for(int i{}; i < count; ++i) {
         const auto v{samples[i] * 32767.0f};
         buffer[i] = static_cast<int16_t>(v);
     }
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-bool XSonic::addS32SamplesToInputBuffer(const int32_t *samples, const int &numSamples) {
+bool SonicPrivate::addS32SamplesToInputBuffer(const int32_t *samples, const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -244,19 +263,20 @@ bool XSonic::addS32SamplesToInputBuffer(const int32_t *samples, const int &numSa
         return {};
     }
 
-    const auto count{numSamples * m_numChannels};
-    const auto buffer{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
+    const auto count{numSamples * d.m_numChannels_};
+    const auto buffer{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
+
     for(int i{}; i < count; ++i) {
         const auto v1{samples[i] + 32768},
                     v2{v1 >> 16};
         buffer[i] = static_cast<int16_t>(v2);
     }
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-bool XSonic::addU32SamplesToInputBuffer(const uint32_t *samples, const int &numSamples) {
+bool SonicPrivate::addU32SamplesToInputBuffer(const uint32_t *samples, const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -266,19 +286,19 @@ bool XSonic::addU32SamplesToInputBuffer(const uint32_t *samples, const int &numS
         return {};
     }
 
-    const auto count{numSamples * m_numChannels};
-    const auto buffer{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
+    const auto count{numSamples * d.m_numChannels_};
+    const auto buffer{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
     for(int i{}; i < count; ++i) {
         const auto v1{samples[i] - 2147483648L},
                 v2{v1 >> 16};
         buffer[i] = static_cast<int16_t>(v2);
     }
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-bool XSonic::addShortSamplesToInputBuffer(const int16_t *samples,const int &numSamples) {
+bool SonicPrivate::addShortSamplesToInputBuffer(const int16_t *samples,const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -289,15 +309,15 @@ bool XSonic::addShortSamplesToInputBuffer(const int16_t *samples,const int &numS
     }
 
     const auto src_{samples};
-    const auto dst_{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
-    const auto size_{numSamples * m_numChannels};
+    const auto dst_{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
+    const auto size_{numSamples * d.m_numChannels_};
     std::copy_n(src_,size_,dst_);
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-bool XSonic::addUnsignedShortSamplesToInputBuffer(const uint16_t *samples, const int &numSamples) {
+bool SonicPrivate::addUnsignedShortSamplesToInputBuffer(const uint16_t *samples, const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -307,18 +327,18 @@ bool XSonic::addUnsignedShortSamplesToInputBuffer(const uint16_t *samples, const
         return {};
     }
 
-    const auto dst_{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
-    const auto size_{numSamples * m_numChannels};
+    const auto dst_{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
+    const auto size_{numSamples * d.m_numChannels_};
 
     for(int i{}; i < size_; ++i) {
         dst_[i] = static_cast<int16_t>(samples[i] - 32768);
     }
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-bool XSonic::addUnsignedCharSamplesToInputBuffer(const uint8_t *samples,const int &numSamples) {
+bool SonicPrivate::addUnsignedCharSamplesToInputBuffer(const uint8_t *samples,const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -328,8 +348,8 @@ bool XSonic::addUnsignedCharSamplesToInputBuffer(const uint8_t *samples,const in
         return {};
     }
 
-    const auto count{numSamples * m_numChannels};
-    const auto buffer{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
+    const auto count{numSamples * d.m_numChannels_};
+    const auto buffer{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
 
     for (int i{};i < count;++i){
         const auto v1{samples[i] - 128},
@@ -337,11 +357,11 @@ bool XSonic::addUnsignedCharSamplesToInputBuffer(const uint8_t *samples,const in
         buffer[i] = static_cast<int16_t>(v2);
     }
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-bool XSonic::addCharSamplesToInputBuffer(const int8_t *samples, const int &numSamples) {
+bool SonicPrivate::addCharSamplesToInputBuffer(const int8_t *samples, const int &numSamples) {
 
     if(numSamples <= 0 || !samples) {
         return {};
@@ -351,32 +371,32 @@ bool XSonic::addCharSamplesToInputBuffer(const int8_t *samples, const int &numSa
         return {};
     }
 
-    const auto buffer{m_inputBuffer.data() + m_numInputSamples * m_numChannels};
-    const auto count{numSamples * m_numChannels};
+    const auto buffer{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
+    const auto count{numSamples * d.m_numChannels_};
 
     for (int i{};i < count;++i){
         buffer[i] = static_cast<int16_t>(samples[i] << 8);
     }
 
-    m_numInputSamples += numSamples;
+    d.m_numInputSamples_ += numSamples;
     return true;
 }
 
-void XSonic::removeInputSamples(const int &position) {
+void SonicPrivate::removeInputSamples(const int &position) {
 
-    const auto remainingSamples{m_numInputSamples - position};
+    const auto remainingSamples{d.m_numInputSamples_ - position};
 
     if(remainingSamples > 0) {
-        const auto src_{m_inputBuffer.data() + position * m_numChannels};
-        const auto dst_{m_inputBuffer.data()};
-        const auto size_{remainingSamples * m_numChannels};
+        const auto src_{m_inputBuffer_.data() + position * d.m_numChannels_};
+        const auto dst_{m_inputBuffer_.data()};
+        const auto size_{remainingSamples * d.m_numChannels_};
         std::move(src_,src_ + size_ ,dst_);
     }
 
-    m_numInputSamples = remainingSamples;
+    d.m_numInputSamples_ = remainingSamples;
 }
 
-bool XSonic::copyToOutput(const int16_t *samples,const int &numSamples) {
+bool SonicPrivate::copyToOutput(const int16_t *samples,const int &numSamples) {
 
     if (!samples || numSamples <= 0){
         return {};
@@ -387,43 +407,41 @@ bool XSonic::copyToOutput(const int16_t *samples,const int &numSamples) {
     }
 
     const auto src_{samples};
-    const auto dst_{m_outputBuffer.data() + m_numOutputSamples*m_numChannels};
-    const auto size_{numSamples * m_numChannels};
+    const auto dst_{m_outputBuffer_.data() + d.m_numOutputSamples_ * d.m_numChannels_};
+    const auto size_{numSamples * d.m_numChannels_};
     std::copy_n(src_,size_,dst_);
-
-    m_numOutputSamples += numSamples;
-
+    d.m_numOutputSamples_ += numSamples;
     return true;
 }
 
-int XSonic::copyInputToOutput(const int &position) {
+int SonicPrivate::copyInputToOutput(const int &position) {
 
-    auto numSamples{m_remainingInputToCopy};
+    auto numSamples{d.m_remainingInputToCopy_};
 
-    if(numSamples > m_maxRequired) {
-        numSamples = m_maxRequired;
+    if(numSamples > d.m_maxRequired_) {
+        numSamples = d.m_maxRequired_;
     }
 
-    if(const auto in_buffer{m_inputBuffer.data() + position * m_numChannels};
+    if(const auto in_buffer{m_inputBuffer_.data() + position * d.m_numChannels_};
         !copyToOutput(in_buffer,numSamples)) {
         return -1;
     }
 
-    m_remainingInputToCopy -= numSamples;
+    d.m_remainingInputToCopy_ -= numSamples;
     return numSamples;
 }
 
-void XSonic::downSampleInput(const int16_t *samples,
+void SonicPrivate::downSampleInput(const int16_t *samples,
                              const int &skip) {
 
     if (!samples){
         return;
     }
 
-    const auto numSamples{m_maxRequired / skip},
-                samplesPerValue{m_numChannels * skip};
+    const auto numSamples{d.m_maxRequired_ / skip},
+                samplesPerValue{d.m_numChannels_ * skip};
 
-    auto downSamples{m_downSampleBuffer.data()};
+    auto downSamples{m_downSampleBuffer_.data()};
 
     for(int i{}; i < numSamples; ++i) {
         int value{};
@@ -435,7 +453,7 @@ void XSonic::downSampleInput(const int16_t *samples,
     }
 }
 
-int XSonic::findPitchPeriodInRange(const int16_t *samples,
+int SonicPrivate::findPitchPeriodInRange(const int16_t *samples,
                                    const int &minPeriod,
                                    const int &maxPeriod,
                                    int &retMinDiff,
@@ -476,11 +494,11 @@ int XSonic::findPitchPeriodInRange(const int16_t *samples,
     return bestPeriod;
 }
 
-bool XSonic::prevPeriodBetter(const int &minDiff,
+bool SonicPrivate::prevPeriodBetter(const int &minDiff,
                               const int &maxDiff,
                               const int &preferNewPeriod) const {
 
-    if(!minDiff || !m_prevPeriod) {
+    if(!minDiff || !d.m_prevPeriod_) {
         return {};
     }
 
@@ -490,12 +508,12 @@ bool XSonic::prevPeriodBetter(const int &minDiff,
             return {};
         }
 
-        if(minDiff * 2 <= m_prevMinDiff * 3) {
+        if(minDiff * 2 <= d.m_prevMinDiff_ * 3) {
             /* Mismatch is not that much greater this period */
             return {};
         }
     } else {
-        if(minDiff <= m_prevMinDiff) {
+        if(minDiff <= d.m_prevMinDiff_) {
             return {};
         }
     }
@@ -503,60 +521,60 @@ bool XSonic::prevPeriodBetter(const int &minDiff,
     return true;
 }
 
-int XSonic::findPitchPeriod(const int16_t *samples,const int &preferNewPeriod) {
+int SonicPrivate::findPitchPeriod(const int16_t *samples,const int &preferNewPeriod) {
 
     if (!samples){
         return -1;
     }
 
-    auto minPeriod{m_minPeriod},maxPeriod{m_maxPeriod};
-    const auto sampleRate{m_sampleRate};
+    auto minPeriod{d.m_minPeriod_},maxPeriod{d.m_maxPeriod_};
+    const auto sampleRate{d.m_sampleRate_};
 
     auto skip {1};
-    if(sampleRate > SONIC_AMDF_FREQ_ && !m_quality ) {
+    if(sampleRate > SONIC_AMDF_FREQ_ && !d.m_quality_) {
         skip = sampleRate / SONIC_AMDF_FREQ_;
     }
 
     int period,minDiff{},maxDiff{};
-    if(1 == m_numChannels && 1 == skip) {
+    if(1 == d.m_numChannels_ && 1 == skip) {
         period = findPitchPeriodInRange(samples, minPeriod, maxPeriod, minDiff, maxDiff);
     } else {
         downSampleInput(samples, skip);
-        period = findPitchPeriodInRange(m_downSampleBuffer.data(), minPeriod/skip,
+        period = findPitchPeriodInRange(m_downSampleBuffer_.data(), minPeriod/skip,
                                         maxPeriod/skip, minDiff, maxDiff);
         if(1 != skip) {
             period *= skip;
             minPeriod = period - (skip << 2);
             maxPeriod = period + (skip << 2);
 
-            if(minPeriod < m_minPeriod) {
-                minPeriod = m_minPeriod;
+            if(minPeriod < d.m_minPeriod_) {
+                minPeriod = d.m_minPeriod_;
             }
 
-            if(maxPeriod > m_maxPeriod) {
-                maxPeriod = m_maxPeriod;
+            if(maxPeriod > d.m_maxPeriod_) {
+                maxPeriod = d.m_maxPeriod_;
             }
 
-            if(1 == m_numChannels) {
+            if(1 == d.m_numChannels_) {
                 period = findPitchPeriodInRange(samples, minPeriod, maxPeriod,
                                                 minDiff, maxDiff);
             } else {
                 downSampleInput(samples, 1);
-                period = findPitchPeriodInRange(m_downSampleBuffer.data(), minPeriod,
+                period = findPitchPeriodInRange(m_downSampleBuffer_.data(), minPeriod,
                                                 maxPeriod, minDiff, maxDiff);
             }
         }
     }
 
     const auto retPeriod{prevPeriodBetter(minDiff, maxDiff, preferNewPeriod) ?
-                         m_prevPeriod : period};
+                         d.m_prevPeriod_ : period};
 
-    m_prevMinDiff = minDiff;
-    m_prevPeriod = period;
+    d.m_prevMinDiff_ = minDiff;
+    d.m_prevPeriod_ = period;
     return retPeriod;
 }
 
-void XSonic::overlapAdd(const int &numSamples,
+void SonicPrivate::overlapAdd(const int &numSamples,
                         const int &numChannels,
                         int16_t *out,
                         const int16_t *rampDown,
@@ -582,7 +600,7 @@ void XSonic::overlapAdd(const int &numSamples,
     }
 }
 
-void XSonic::overlapAddWithSeparation(const int &numSamples,
+void SonicPrivate::overlapAddWithSeparation(const int &numSamples,
                                       const int &numChannels,
                                       const int &separation,
                                       int16_t *out,
@@ -614,50 +632,50 @@ void XSonic::overlapAddWithSeparation(const int &numSamples,
     }
 }
 
-bool XSonic::moveNewSamplesToPitchBuffer(const int &originalNumOutputSamples) {
+bool SonicPrivate::moveNewSamplesToPitchBuffer(const int &originalNumOutputSamples) {
 
-    const auto numSamples{m_numOutputSamples - originalNumOutputSamples},
-                numChannels{m_numChannels};
+    const auto numSamples{d.m_numOutputSamples_ - originalNumOutputSamples},
+                numChannels{d.m_numChannels_};
 
-    if(m_numPitchSamples + numSamples > m_pitchBufferSize) {
-        m_pitchBufferSize += (m_pitchBufferSize >> 1) + numSamples;
-        m_pitchBuffer.clear();
-        TRY_CATCH(CHECK_EXC(m_pitchBuffer.resize(m_pitchBufferSize * numChannels)),return {});
+    if(d.m_numPitchSamples_ + numSamples > d.m_pitchBufferSize_) {
+        d.m_pitchBufferSize_ += (d.m_pitchBufferSize_ >> 1) + numSamples;
+        m_pitchBuffer_.clear();
+        TRY_CATCH(CHECK_EXC(m_pitchBuffer_.resize(d.m_pitchBufferSize_ * numChannels)),return {});
     }
 
-    const auto src_{m_outputBuffer.data() + originalNumOutputSamples * numChannels};
-    const auto dst_{m_pitchBuffer.data() + m_numPitchSamples * numChannels};
+    const auto src_{m_outputBuffer_.data() + originalNumOutputSamples * numChannels};
+    const auto dst_{m_pitchBuffer_.data() + d.m_numPitchSamples_ * numChannels};
     const auto size_{numSamples * numChannels};
     std::copy_n(src_,size_,dst_);
 
-    m_numOutputSamples = originalNumOutputSamples;
-    m_numPitchSamples += numSamples;
+    d.m_numOutputSamples_ = originalNumOutputSamples;
+    d.m_numPitchSamples_ += numSamples;
     return true;
 }
 
-void XSonic::removePitchSamples(const int &numSamples) {
+void SonicPrivate::removePitchSamples(const int &numSamples) {
 
     if(!numSamples) {
         return;
     }
 
-    if(numSamples != m_numPitchSamples) {
-        const auto numChannels{m_numChannels};
-        const auto src_{m_pitchBuffer.data() + numSamples * numChannels};
-        const auto dst_{m_pitchBuffer.data()};
-        const auto size_{(m_numPitchSamples - numSamples) * numChannels};
+    if(numSamples != d.m_numPitchSamples_) {
+        const auto numChannels{d.m_numChannels_};
+        const auto src_{m_pitchBuffer_.data() + numSamples * numChannels};
+        const auto dst_{m_pitchBuffer_.data()};
+        const auto size_{(d.m_numPitchSamples_ - numSamples) * numChannels};
         std::move(src_,src_ + size_,dst_);
     }
 
-    m_numPitchSamples -= numSamples;
+    d.m_numPitchSamples_ -= numSamples;
 }
 
-bool XSonic::adjustPitch(const int &originalNumOutputSamples) {
+bool SonicPrivate::adjustPitch(const int &originalNumOutputSamples) {
 
-    const auto pitch{m_pitch};
-    const auto numChannels{m_numChannels};
+    const auto pitch{d.m_pitch_};
+    const auto numChannels{d.m_numChannels_};
 
-    if(originalNumOutputSamples == m_numOutputSamples) {
+    if(originalNumOutputSamples == d.m_numOutputSamples_) {
         return true;
     }
 
@@ -666,8 +684,8 @@ bool XSonic::adjustPitch(const int &originalNumOutputSamples) {
     }
 
     int position {};
-    while(m_numPitchSamples - position >= m_maxRequired) {
-        const auto period{findPitchPeriod(m_pitchBuffer.data() + position * numChannels, 0)};
+    while(d.m_numPitchSamples_ - position >= d.m_maxRequired_) {
+        const auto period{findPitchPeriod(m_pitchBuffer_.data() + position * numChannels, 0)};
 
         const auto float_period{static_cast<float >(period)};
         const auto newPeriod{static_cast<int>(float_period / pitch)};
@@ -676,20 +694,20 @@ bool XSonic::adjustPitch(const int &originalNumOutputSamples) {
             return {};
         }
 
-        const auto out{m_outputBuffer.data() + m_numOutputSamples * numChannels};
+        const auto out{m_outputBuffer_.data() + d.m_numOutputSamples_ * numChannels};
 
         if(pitch >= 1.0f) {
-            const auto rampDown{m_pitchBuffer.data() + position * numChannels},
-                rampUp{m_pitchBuffer.data() + (position + period - newPeriod) * numChannels};
+            const auto rampDown{m_pitchBuffer_.data() + position * numChannels},
+                rampUp{m_pitchBuffer_.data() + (position + period - newPeriod) * numChannels};
             overlapAdd(newPeriod, numChannels, out, rampDown, rampUp);
         } else {
-            const auto rampDown{m_pitchBuffer.data() + position * numChannels},
-                rampUp{m_pitchBuffer.data() + position * numChannels};
+            const auto rampDown{m_pitchBuffer_.data() + position * numChannels},
+                rampUp{m_pitchBuffer_.data() + position * numChannels};
             const auto separation{newPeriod - period};
             overlapAddWithSeparation(period, numChannels, separation, out, rampDown, rampUp);
         }
 
-        m_numOutputSamples += newPeriod;
+        d.m_numOutputSamples_ += newPeriod;
         position += period;
     }
 
@@ -697,24 +715,24 @@ bool XSonic::adjustPitch(const int &originalNumOutputSamples) {
     return true;
 }
 
-int XSonic::findSincCoefficient(const int &i,
+int SonicPrivate::findSincCoefficient(const int &i,
                                 const int &ratio,
                                 const int &width) {
 
     static constexpr auto lobePoints {(SINC_TABLE_SIZE - 1) / SINC_FILTER_POINTS};
 
-    const auto left{i * lobePoints + (ratio * lobePoints) / width},
+    const auto left{i * lobePoints + ratio * lobePoints / width},
                 right{left + 1};
 
-    const auto position{static_cast<int>(i * lobePoints * width + ratio * lobePoints - left * width)};
+    const auto position{i * lobePoints * width + ratio * lobePoints - left * width};
 
     const auto leftVal{sincTable[left]},
                 rightVal{sincTable[right]};
 
-    return ((leftVal * (width - position) + rightVal * position) << 1) / width;
+    return (leftVal * (width - position) + rightVal * position << 1) / width;
 }
 
-int16_t XSonic::interpolate(const int16_t *in,
+int16_t SonicPrivate::interpolate(const int16_t *in,
                           const int &oldSampleRate,
                           const int &newSampleRate) const {
 
@@ -728,9 +746,9 @@ int16_t XSonic::interpolate(const int16_t *in,
 
     /* Compute N-point sinc FIR-filter here.  Clip rather than overflow. */
 
-    const auto position{m_newRatePosition * oldSampleRate},
-                leftPosition{m_oldRatePosition * newSampleRate},
-                rightPosition{(m_oldRatePosition + 1) * newSampleRate},
+    const auto position{d.m_newRatePosition_ * oldSampleRate},
+                leftPosition{d.m_oldRatePosition_ * newSampleRate},
+                rightPosition{(d.m_oldRatePosition_ + 1) * newSampleRate},
                 ratio{rightPosition - position - 1},
                 width{rightPosition - leftPosition};
 
@@ -739,7 +757,7 @@ int16_t XSonic::interpolate(const int16_t *in,
 
         const auto weight{findSincCoefficient(i, ratio, width)};
         /* printf("%u %f\n", i, weight); */
-        const auto value{in[i * m_numChannels] * weight};
+        const auto value{in[i * d.m_numChannels_] * weight};
         const auto oldSign {getSign(total)};
         total += value;
 
@@ -761,11 +779,11 @@ int16_t XSonic::interpolate(const int16_t *in,
     return static_cast<int16_t>(total >> 16);
 }
 
-bool XSonic::adjustRate(const float &rate,const int &originalNumOutputSamples) {
+bool SonicPrivate::adjustRate(const float &rate,const int &originalNumOutputSamples) {
 
-    auto oldSampleRate{m_sampleRate},
-        newSampleRate{static_cast<int>(static_cast<float>(oldSampleRate) / rate)},
-        numChannels{m_numChannels};
+    auto oldSampleRate{d.m_sampleRate_},
+        newSampleRate{static_cast<int>(static_cast<float>(oldSampleRate) / rate)};
+    const auto numChannels{d.m_numChannels_};
 
     static constexpr auto N{SINC_FILTER_POINTS};
     /* Set these values to help with the integer math */
@@ -774,7 +792,7 @@ bool XSonic::adjustRate(const float &rate,const int &originalNumOutputSamples) {
         oldSampleRate >>= 1;
     }
 
-    if(originalNumOutputSamples == m_numOutputSamples) {
+    if(originalNumOutputSamples == d.m_numOutputSamples_) {
         return true;
     }
 
@@ -784,37 +802,37 @@ bool XSonic::adjustRate(const float &rate,const int &originalNumOutputSamples) {
 
     /* Leave at least N pitch sample in the buffer */
     int position{};
-    for(;position < m_numPitchSamples - N; position++) {
+    for(;position < d.m_numPitchSamples_ - N; position++) {
 
-        while((m_oldRatePosition + 1) * newSampleRate > m_newRatePosition * oldSampleRate) {
+        while((d.m_oldRatePosition_ + 1) * newSampleRate > d.m_newRatePosition_ * oldSampleRate) {
 
             if(!enlargeOutputBufferIfNeeded(1)) {
                 return {};
             }
 
-            auto out{m_outputBuffer.data() + m_numOutputSamples * numChannels},
-                in{m_pitchBuffer.data() + position * numChannels};
+            auto out{m_outputBuffer_.data() + d.m_numOutputSamples_ * numChannels},
+                in{m_pitchBuffer_.data() + position * numChannels};
 
             for(int i{}; i < numChannels; i++) {
                 *out++ = interpolate(in++, oldSampleRate, newSampleRate);
             }
 
-            ++m_newRatePosition;
-            ++m_numOutputSamples;
+            ++d.m_newRatePosition_;
+            ++d.m_numOutputSamples_;
         }
 
-        m_oldRatePosition++;
+        //d.m_oldRatePosition_++;
 
-        if(m_oldRatePosition == oldSampleRate) {
+        if(++d.m_oldRatePosition_ == oldSampleRate) {
 
-            m_oldRatePosition = 0;
+            d.m_oldRatePosition_ = 0;
 
-            if(m_newRatePosition != newSampleRate) {
+            if(d.m_newRatePosition_ != newSampleRate) {
                 std::cerr << "Assertion failed: m_newRatePosition != newSampleRate\n";
                 return {};
             }
 
-            m_newRatePosition = 0;
+            d.m_newRatePosition_ = 0;
         }
     }
 
@@ -822,39 +840,39 @@ bool XSonic::adjustRate(const float &rate,const int &originalNumOutputSamples) {
     return true;
 }
 
-int XSonic::skipPitchPeriod(const int16_t *samples,
+int SonicPrivate::skipPitchPeriod(const int16_t *samples,
                             const float &speed,
                             const int &period) {
 
-    const auto numChannels{m_numChannels};
-    const auto f_period{static_cast<float >(period)};
+    const auto numChannels{d.m_numChannels_};
+    const auto f_period{static_cast<float>(period)};
 
     int newSamples;
     if(speed >= 2.0f) {
         newSamples = static_cast<decltype(newSamples) >(f_period / (speed - 1.0f));
     } else {
         newSamples = period;
-        m_remainingInputToCopy = static_cast<decltype(m_remainingInputToCopy)>(f_period * (2.0f - speed) / (speed - 1.0f));
+        d.m_remainingInputToCopy_ = static_cast<decltype(d.m_remainingInputToCopy_)>(f_period * (2.0f - speed) / (speed - 1.0f));
     }
 
     if(!enlargeOutputBufferIfNeeded(newSamples)) {
         return -1;
     }
 
-    const auto out_buffer{m_outputBuffer.data() + m_numOutputSamples * numChannels};
+    const auto out_buffer{m_outputBuffer_.data() + d.m_numOutputSamples_ * numChannels};
 
     overlapAdd(newSamples,numChannels,out_buffer,samples,samples + period * numChannels);
 
-    m_numOutputSamples += newSamples;
+    d.m_numOutputSamples_ += newSamples;
 
     return newSamples;
 }
 
-int XSonic::insertPitchPeriod(const int16_t *samples,
+int SonicPrivate::insertPitchPeriod(const int16_t *samples,
                               const float &speed,
                               const int &period) {
 
-    const auto numChannels{m_numChannels};
+    const auto numChannels{d.m_numChannels_};
     const auto f_period{static_cast<float>(period)};
 
     int newSamples;
@@ -862,39 +880,40 @@ int XSonic::insertPitchPeriod(const int16_t *samples,
         newSamples = static_cast<decltype(newSamples)>(f_period * speed / (1.0f - speed));
     } else {
         newSamples = period;
-        m_remainingInputToCopy = static_cast<decltype(m_remainingInputToCopy)>(f_period * (2.0f * speed - 1.0f) / (1.0f - speed));
+        d.m_remainingInputToCopy_ =
+            static_cast<decltype(d.m_remainingInputToCopy_)>(f_period * (2.0f * speed - 1.0f) / (1.0f - speed));
     }
 
     if(!enlargeOutputBufferIfNeeded(period + newSamples)) {
         return -1;
     }
 
-    auto out{m_outputBuffer.data() + m_numOutputSamples * numChannels};
+    auto out{m_outputBuffer_.data() + d.m_numOutputSamples_ * numChannels};
 
     std::copy_n(samples,period * numChannels,out);
 
-    out = m_outputBuffer.data() + (m_numOutputSamples + period) * numChannels;
+    out = m_outputBuffer_.data() + (d.m_numOutputSamples_ + period) * numChannels;
 
     overlapAdd(newSamples,numChannels,out,samples + period * numChannels,samples);
 
-    m_numOutputSamples += period + newSamples;
+    d.m_numOutputSamples_ += period + newSamples;
 
     return newSamples;
 }
 
-bool XSonic::changeSpeed(const float &speed) {
+bool SonicPrivate::changeSpeed(const float &speed) {
 
-    const auto numSamples{m_numInputSamples},
-                maxRequired{m_maxRequired};
+    const auto numSamples{d.m_numInputSamples_},
+                maxRequired{d.m_maxRequired_};
 
-    if(m_numInputSamples < maxRequired) {
+    if(d.m_numInputSamples_ < maxRequired) {
         return true;
     }
 
     int position{};
     do {
         int newSamples;
-        if(m_remainingInputToCopy > 0) {
+        if(d.m_remainingInputToCopy_ > 0) {
             newSamples = copyInputToOutput(position);
 
             if (newSamples < 0){
@@ -904,7 +923,7 @@ bool XSonic::changeSpeed(const float &speed) {
             position += newSamples;
         } else {
 
-            const auto samples{m_inputBuffer.data() + position * m_numChannels};
+            const auto samples{m_inputBuffer_.data() + position * d.m_numChannels_};
             const auto period{findPitchPeriod(samples, 1)};
 
             if (!period) {
@@ -941,27 +960,27 @@ bool XSonic::changeSpeed(const float &speed) {
     return true;
 }
 
-bool XSonic::processStreamInput() {
+bool SonicPrivate::processStreamInput() {
 
-    const auto originalNumOutputSamples{m_numOutputSamples};
-    const auto speed{m_speed / m_pitch};
-    auto rate{m_rate};
+    const auto originalNumOutputSamples{d.m_numOutputSamples_};
+    const auto speed{d.m_speed_ / d.m_pitch_};
+    auto rate{d.m_rate_};
 
-    if(!m_useChordPitch) {
-        rate *= m_pitch;
+    if(!d.m_useChordPitch_) {
+        rate *= d.m_pitch_;
     }
 
     if(speed > 1.00001f || speed < 0.99999f) {
         changeSpeed(speed);
     } else {
-        if(!copyToOutput(m_inputBuffer.data(),m_numInputSamples)) {
+        if(!copyToOutput(m_inputBuffer_.data(),d.m_numInputSamples_)) {
             return {};
         }
-        m_numInputSamples = 0;
+        d.m_numInputSamples_ = 0;
     }
 
-    if(m_useChordPitch) {
-        if(1.0f != m_pitch) {
+    if(d.m_useChordPitch_) {
+        if(1.0f != d.m_pitch_) {
             if(!adjustPitch(originalNumOutputSamples)) {
                 return {};
             }
@@ -972,23 +991,21 @@ bool XSonic::processStreamInput() {
         }
     }else{}
 
-    if(1.0f != m_volume) {
+    if(1.0f != d.m_volume_) {
         /* Adjust output volume. */
-        scaleSamples(m_outputBuffer.data() + originalNumOutputSamples*m_numChannels,
-                     (m_numOutputSamples - originalNumOutputSamples)*m_numChannels,
-                     m_volume);
+        scaleSamples(m_outputBuffer_.data() + originalNumOutputSamples * d.m_numChannels_,
+                     (d.m_numOutputSamples_ - originalNumOutputSamples) * d.m_numChannels_,
+                     d.m_volume_);
     }
 
     return true;
 }
 
-void XSonic::Move_(XSonic *src) noexcept(true){
-    m_inputBuffer = std::move(src->m_inputBuffer);
-    m_outputBuffer = std::move(src->m_outputBuffer);
-    m_pitchBuffer = std::move(src->m_pitchBuffer);
-    m_downSampleBuffer = std::move(src->m_downSampleBuffer);
-    const auto dst_{static_cast<XSonic_data*>(this)},
-        src_{static_cast<XSonic_data*>(src)};
-    *dst_ = *src_;
-    *src_ = {};
+void SonicPrivate::Move_(SonicPrivate *src) noexcept(true){
+    m_inputBuffer_ = std::move(src->m_inputBuffer_);
+    m_outputBuffer_ = std::move(src->m_outputBuffer_);
+    m_pitchBuffer_ = std::move(src->m_pitchBuffer_);
+    m_downSampleBuffer_ = std::move(src->m_downSampleBuffer_);
+    d = src->d;
+    src->d = {};
 }

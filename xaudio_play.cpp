@@ -190,8 +190,6 @@ int64_t XAudio_Play::Speed_Change(data_buffer_t &in,data_buffer_t &out) {
         out_size = static_cast<decltype(out_size)>(out.size());
     }
 
-    //cerr << __FUNCTION__  << " out_size = " << out_size << "\n";
-
     return out_size;
 }
 
