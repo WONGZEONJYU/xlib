@@ -1,2 +1,2 @@
-
-.idea/editor.xml
+.idea/*
+.cmake-*
