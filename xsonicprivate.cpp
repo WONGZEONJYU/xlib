@@ -1,8 +1,10 @@
-#include "xsonic.hpp"
 #include "xsonicprivate.hpp"
 
 static inline constexpr auto SINC_FILTER_POINTS{12},
-SINC_TABLE_SIZE{601};
+SINC_TABLE_SIZE{601},
+SONIC_MIN_PITCH_{65},
+SONIC_MAX_PITCH_{400},
+SONIC_AMDF_FREQ_{4000};
 
 static inline constexpr int16_t sincTable[SINC_TABLE_SIZE] = {
         0, 0, 0, 0, 0, 0, 0, -1, -1, -2, -2, -3, -4, -6, -7, -9, -10, -12, -14,
@@ -55,6 +57,60 @@ static inline constexpr int16_t sincTable[SINC_TABLE_SIZE] = {
         -12, -10, -9, -7, -6, -4, -3, -2, -2, -1, -1, 0, 0, 0, 0, 0, 0, 0
 };
 
+int SonicPrivate::ReadFromStream_helper(const void *samples,const int &maxSamples,
+    Middle_Logic_type &&f) {
+
+    if (!d.m_is_init_ || !samples || maxSamples <= 0) {
+        return -1;
+    }
+
+    auto numSamples{d.m_numOutputSamples_};
+    if(!numSamples) {
+        return {};
+    }
+
+    int remainingSamples {};
+    if(numSamples > maxSamples) {
+        remainingSamples = numSamples - maxSamples;
+        numSamples = maxSamples;
+    }
+
+    const auto out_buffer{m_outputBuffer_.data()};
+    const auto count{numSamples * d.m_numChannels_};
+
+    f(out_buffer,count);
+
+    if(remainingSamples > 0) {
+        const auto src_{m_outputBuffer_.data() + count};
+        const auto dst_{m_outputBuffer_.data()};
+        const auto size_{remainingSamples * d.m_numChannels_};
+        std::move(src_,src_ + size_,dst_);
+    }
+
+    d.m_numOutputSamples_ = remainingSamples;
+    return numSamples;
+}
+
+bool SonicPrivate::WriteToStream_helper(const void *samples,const int &numSamples,
+    Middle_Logic_type &&f) {
+
+    if (!d.m_is_init_ || !samples || numSamples <= 0){
+        return {};
+    }
+
+    if(!enlargeInputBufferIfNeeded(numSamples)) {
+        return {};
+    }
+
+    const auto count{numSamples * d.m_numChannels_};
+    const auto buffer{m_inputBuffer_.data() + d.m_numInputSamples_ * d.m_numChannels_};
+
+    f(buffer,count);
+
+    d.m_numInputSamples_ += numSamples;
+    return true;
+}
+
 void SonicPrivate::Close(){
     m_inputBuffer_.clear();
     m_outputBuffer_.clear();
@@ -68,7 +124,6 @@ void SonicPrivate::scaleSamples(int16_t *samples,
                           const float & volume) {
 
     const auto fixedPointVolume{static_cast<int>(volume * 4096.0f)};
-    //auto numSamples_{numSamples};
 
     for (int i {}; i < numSamples; i++) {
         auto value{samples[i] * fixedPointVolume >> 12};
@@ -79,17 +134,6 @@ void SonicPrivate::scaleSamples(int16_t *samples,
         }else{}
         samples[i] = static_cast<int16_t>(value);;
     }
-
-    // while(numSamples_--) {
-    //     const auto sample{*samples};
-    //     auto value{sample * fixedPointVolume >> 12};
-    //     if(value > 32767) {
-    //         value = 32767;
-    //     }else if(value < -32767) {
-    //         value = -32767;
-    //     }else{}
-    //     *samples++ = static_cast<int16_t>(value);
-    // }
 }
 
 bool SonicPrivate::allocateStreamBuffers(const int &sampleRate,const int &numChannels) {
@@ -154,6 +198,8 @@ bool SonicPrivate::enlargeInputBufferIfNeeded(const int &numSamples) {
     }
     return true;
 }
+
+#if 0
 
 bool SonicPrivate::addDoubleSamplesToInputBuffer(const double *samples, const int &numSamples) {
 
@@ -381,6 +427,8 @@ bool SonicPrivate::addCharSamplesToInputBuffer(const int8_t *samples, const int 
     d.m_numInputSamples_ += numSamples;
     return true;
 }
+
+#endif
 
 void SonicPrivate::removeInputSamples(const int &position) {
 

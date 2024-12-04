@@ -8,9 +8,6 @@ class SonicPrivate {
 
 protected:
     explicit SonicPrivate() = default;
-    static inline constexpr auto SONIC_MIN_PITCH_{65},
-        SONIC_MAX_PITCH_{400},
-        SONIC_AMDF_FREQ_{4000};
 
     struct {
         float m_speed_{},m_volume_{},m_pitch_{},m_rate_{},m_avePower_{};
@@ -25,8 +22,9 @@ protected:
     std::vector<int16_t> m_inputBuffer_,m_outputBuffer_,
                         m_pitchBuffer_,m_downSampleBuffer_;
 
-    using
-    bool addSamplesToInputBuffer(const void *,const int &numSamples);
+    using Middle_Logic_type = std::function<void(int16_t * ,const int &n)>;
+    bool WriteToStream_helper(const void *,const int &,Middle_Logic_type &&);
+    int ReadFromStream_helper(const void *,const int&,Middle_Logic_type &&);
 
     static void scaleSamples(int16_t * ,
                              const int&,
@@ -41,7 +39,7 @@ protected:
     bool enlargeOutputBufferIfNeeded(const int &numSamples);
 
     bool enlargeInputBufferIfNeeded(const int &numSamples);
-
+#if 0
     bool addDoubleSamplesToInputBuffer(const double *samples,
                                       const int &numSamples);
 
@@ -71,7 +69,7 @@ protected:
 
     bool addUnsignedCharSamplesToInputBuffer(const uint8_t *samples,
                                              const int &numSamples);
-
+#endif
     void removeInputSamples(const int &position);
 
     bool copyToOutput(const int16_t *samples,
@@ -140,7 +138,6 @@ protected:
 
 public:
     void Close();
-
     virtual ~SonicPrivate() = default;
 };
 

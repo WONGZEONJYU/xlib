@@ -3,7 +3,7 @@ extern "C"{
 }
 #include "xcodec_parameters.hpp"
 
-void XCodecParameters::Reset(AVCodecParameters *obj) noexcept(true) {
+void XCodecParameters::Reset(AVCodecParameters *obj) {
     av_freep(&obj->extradata);
     av_channel_layout_uninit(&obj->ch_layout);
     av_packet_side_data_free(&obj->coded_side_data,&obj->nb_coded_side_data);
@@ -26,8 +26,8 @@ void XCodecParameters::Reset(AVCodecParameters *obj) noexcept(true) {
     obj->level               = AV_LEVEL_UNKNOWN;
 }
 
-void XCodecParameters::Move(XCodecParameters *obj) noexcept(true) {
-    auto src_{static_cast<AVCodecParameters*>(obj)};
+void XCodecParameters::Move(XCodecParameters *obj) noexcept(true){
+    const auto src_{static_cast<AVCodecParameters*>(obj)};
     const auto dst_{static_cast<decltype(src_)>(this)};
     Reset(dst_);//先释放自身的数据,再进行移动
     *dst_ = *src_;
@@ -48,7 +48,8 @@ XCodecParameters::XCodecParameters()
     Reset(this);
 }
 
-XCodecParameters::XCodecParameters(const AVCodecContext *src,const AVRational &tb,const int64_t &total_ms) noexcept(false)
+XCodecParameters::XCodecParameters(const AVCodecContext *src,
+    const AVRational &tb,const int64_t &total_ms)
 :XCodecParameters(){
     from_context(src);
     m_time_base_ = tb;
@@ -56,7 +57,8 @@ XCodecParameters::XCodecParameters(const AVCodecContext *src,const AVRational &t
     m_total_ms_ = total_ms;
 }
 
-XCodecParameters::XCodecParameters(const AVCodecParameters *src,const AVRational &tb,const int64_t &total_ms) noexcept(false)
+XCodecParameters::XCodecParameters(const AVCodecParameters *src,
+    const AVRational &tb,const int64_t &total_ms)
 :XCodecParameters(){
     from_AVFormatContext(src);
     m_time_base_ = tb;
@@ -64,7 +66,7 @@ XCodecParameters::XCodecParameters(const AVCodecParameters *src,const AVRational
     m_total_ms_ = total_ms;
 }
 
-XCodecParameters::XCodecParameters(const XCodecParameters &obj) noexcept(false)
+XCodecParameters::XCodecParameters(const XCodecParameters &obj)
 :XCodecParameters() {
     from_AVFormatContext(std::addressof(obj));
     m_time_base_ = obj.m_time_base_;
@@ -74,12 +76,12 @@ XCodecParameters::XCodecParameters(const XCodecParameters &obj) noexcept(false)
 
 XCodecParameters::XCodecParameters(XCodecParameters &&obj) noexcept(true)
 : XCodecParameters(){
-    Move(std::addressof(obj));
+    Move(&obj);
 }
 
-XCodecParameters &XCodecParameters::operator=(const XCodecParameters &obj) noexcept(false) {
-    if (const auto obj_{std::addressof(obj)}; this != obj_){
-        from_AVFormatContext(obj_);
+XCodecParameters &XCodecParameters::operator=(const XCodecParameters &obj) {
+    if (this != &obj){
+        from_AVFormatContext(&obj);
         m_time_base_ = obj.m_time_base_;
         m_x_time_base_ = obj.m_x_time_base_;
         m_total_ms_ = obj.m_total_ms_;
@@ -87,23 +89,23 @@ XCodecParameters &XCodecParameters::operator=(const XCodecParameters &obj) noexc
     return *this;
 }
 
-XCodecParameters& XCodecParameters::operator=(XCodecParameters &&obj) noexcept(true) {
-    if (const auto obj_{std::addressof(obj)}; this != obj_){
-        Move(obj_);
+XCodecParameters& XCodecParameters::operator=(XCodecParameters &&obj) noexcept(true){
+    if (this != &obj){
+        Move(&obj);
     }
     return *this;
 }
 
-bool XCodecParameters::from_AVFormatContext(const AVCodecParameters *src) noexcept(true) {
+bool XCodecParameters::from_AVFormatContext(const AVCodecParameters *src) {
     if (!src){
         PRINT_ERR_TIPS(GET_STR(src is nullptr));
         return {};
     }
-    FF_ERR_OUT(avcodec_parameters_copy(this, src),return {});
+    FF_ERR_OUT(avcodec_parameters_copy(this,src),return {});
     return true;
 }
 
-bool XCodecParameters::to_AVCodecParameters(AVCodecParameters *dst) const noexcept(true){
+bool XCodecParameters::to_AVCodecParameters(AVCodecParameters *dst) const{
     if (!dst){
         PRINT_ERR_TIPS(GET_STR(dst is nullptr));
         return {};
@@ -112,7 +114,7 @@ bool XCodecParameters::to_AVCodecParameters(AVCodecParameters *dst) const noexce
     return true;
 }
 
-bool XCodecParameters::from_context(const AVCodecContext *src)  noexcept(true) {
+bool XCodecParameters::from_context(const AVCodecContext *src) {
     if (!src){
         PRINT_ERR_TIPS(GET_STR(src is nullptr));
         return {};
@@ -121,7 +123,7 @@ bool XCodecParameters::from_context(const AVCodecContext *src)  noexcept(true) {
     return true;
 }
 
-bool XCodecParameters::to_context(AVCodecContext *dst) const noexcept(true) {
+bool XCodecParameters::to_context(AVCodecContext *dst) const {
     if (!dst){
         PRINT_ERR_TIPS(GET_STR(dst is nullptr));
         return {};
@@ -130,16 +132,12 @@ bool XCodecParameters::to_context(AVCodecContext *dst) const noexcept(true) {
     return true;
 }
 
-std::string XCodecParameters::Codec_name() const noexcept(true) {
+std::string XCodecParameters::Codec_name() const {
     return avcodec_get_name(codec_id);
 }
 
-int XCodecParameters::Sample_Format_Size() const noexcept(true){
+int XCodecParameters::Sample_Format_Size() const {
     return av_get_bytes_per_sample(static_cast<AVSampleFormat>(format));
-}
-
-int XCodecParameters::Audio_nbSamples() const noexcept(true) {
-    return frame_size;
 }
 
 XCodecParameters::~XCodecParameters() {
@@ -148,7 +146,7 @@ XCodecParameters::~XCodecParameters() {
 
 XCodecParameters_sp new_XCodecParameters(){
     XCodecParameters_sp obj;
-    TRY_CATCH(CHECK_EXC(obj = std::make_shared<XCodecParameters>()),return {});
+    TRY_CATCH(CHECK_EXC(obj = std::make_shared<XCodecParameters>()));
     return obj;
 }
 
@@ -156,7 +154,7 @@ XCodecParameters_sp new_XCodecParameters(const AVCodecParameters *src,
     const AVRational &tb,
     const int64_t &total_ms){
     XCodecParameters_sp obj;
-    TRY_CATCH(CHECK_EXC(obj = std::make_shared<XCodecParameters>(src,tb,total_ms)),return {});
+    TRY_CATCH(CHECK_EXC(obj = std::make_shared<XCodecParameters>(src,tb,total_ms)));
     return obj;
 }
 
@@ -170,7 +168,7 @@ XCodecParameters_sp new_XCodecParameters(const AVCodecContext *src,
     const AVRational &tb,
     const int64_t &total_ms){
     XCodecParameters_sp obj;
-    TRY_CATCH(CHECK_EXC(obj = std::make_shared<XCodecParameters>(src,tb,total_ms)),return {});
+    TRY_CATCH(CHECK_EXC(obj = std::make_shared<XCodecParameters>(src,tb,total_ms)));
     return obj;
 }
 

@@ -47,15 +47,14 @@ void XFormat::set_fmt_ctx(AVFormatContext *ctx) {
     m_audio_timebase_ = {1,44100};
     for (int i {}; i < m_fmt_ctx_->nb_streams; ++i) {
         const auto stream{m_fmt_ctx_->streams[i]};
-        if (const auto type{stream->codecpar->codec_type}; AVMEDIA_TYPE_VIDEO == type){
+        const auto codec_par{stream->codecpar};
+        if (const auto type{codec_par->codec_type}; AVMEDIA_TYPE_VIDEO == type){
             m_video_index_ = i;
-            m_video_timebase_.num = stream->time_base.num;
-            m_video_timebase_.den = stream->time_base.den;
-            m_codec_id_ = stream->codecpar->codec_id;
+            m_video_timebase_= {stream->time_base.num, stream->time_base.den};
+            m_codec_id_ = codec_par->codec_id;
         } else if (AVMEDIA_TYPE_AUDIO == type){
             m_audio_index_ = i;
-            m_audio_timebase_.num = stream->time_base.num;
-            m_audio_timebase_.den = stream->time_base.den;
+            m_audio_timebase_= {stream->time_base.num, stream->time_base.den};
         } else{}
     }
 }

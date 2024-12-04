@@ -16,6 +16,7 @@ void XMuxTask::Do(XAVPacket &pkt){
 }
 
 void XMuxTask::Main() {
+
     m_xmux_.WriteHead();
 
     while (!is_exit()) {
@@ -36,15 +37,17 @@ void XMuxTask::Main() {
     }
 
     while (!is_exit()) {
-        unique_lock locker(m_mux_);
-        const auto pkt{m_pkts_.Pop()};
-        if (!pkt){
-            locker.unlock();
-            XHelper::MSleep(1);
-            continue;
+
+        {
+            unique_lock locker(m_mux_);
+            if (const auto pkt{m_pkts_.Pop()}){
+                m_xmux_.Write(*pkt);
+                cout << GET_STR(W) << flush;
+                continue;
+            }
         }
-        m_xmux_.Write(*pkt);
-        cout << GET_STR(W) << flush;
+
+        XHelper::MSleep(1);
     }
 
     m_xmux_.WriteEnd();

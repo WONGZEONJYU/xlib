@@ -1,9 +1,15 @@
 #include "xaudio_play.hpp"
 #include "xavframe.hpp"
-#include "xswrsample.hpp"
 
 using namespace std;
 
+/**
+ * 本函数局限于双通道的交换,如果通道多,建议采用重采样
+ * @tparam T 基本算术类型
+ * @param frame
+ * @param out
+ * @return true or false
+ */
 template<typename T>
 static inline bool plane_to_interleaved(const XAVFrame &frame,vector<uint8_t> &out) {
 
@@ -38,10 +44,12 @@ static inline bool plane_to_interleaved(const XAVFrame &frame,vector<uint8_t> &o
     return true;
 }
 
-auto XAudio_Play::Open(const XCodecParameters &parameters)->bool {
+auto XAudio_Play::Open(const XCodecParameters &parameters)-> bool {
     m_ff_audio_parameters_ = parameters;
-    if (const auto &[num, den]{parameters.x_time_base()}; num > 0) {
-        m_time_base_ = static_cast<double>(den) / static_cast<double>(num);
+    if (const auto &[num, den]{parameters.x_time_base()};
+        num > 0) {
+        const auto tb{static_cast<double>(den) / static_cast<double>(num)};
+        m_time_base_ = tb > 0 ? tb : 1.0;
     }
     return {};
 }
@@ -65,6 +73,11 @@ void XAudio_Play::Push(const uint8_t *data, const size_t &size,const int64_t &pt
     push_helper(in_buf,pts);
 }
 
+void XAudio_Play::Push(const XAVFrame *frame) {
+    IS_NULLPTR(frame, return);
+    Push(*frame);
+}
+
 void XAudio_Play::Push(const XAVFrame &frame) {
 
     IS_NULLPTR(frame.data[0], return);
@@ -74,7 +87,8 @@ void XAudio_Play::Push(const XAVFrame &frame) {
 
     if (1 == frame.ch_layout.nb_channels) {
         const auto fmt_size{av_get_bytes_per_sample(static_cast<AVSampleFormat>(frame.format))};
-        Push(frame.data[0],fmt_size * frame.nb_samples,frame.pts);
+        const auto size{fmt_size * frame.nb_samples};
+        Push(frame.data[0],size,frame.pts);
         return;
     }
 
@@ -110,14 +124,9 @@ void XAudio_Play::AudioCallback(void * const userdata,
     this_->Callback(stream,length);
 }
 
-bool XAudio_Play::init_swr(const XSwrParam &p) {
-    m_swr_ = new_XSwrSample(p);
-    return m_swr_.operator bool();
-}
-
 bool XAudio_Play::init_speed_ctr(const int &sample_rate,const int &channels){
-    CHECK_FALSE_(m_init_speed_ctr_ = m_speed_ctr_.Open(sample_rate,channels),return {});
-    return m_init_speed_ctr_;
+    CHECK_FALSE_(m_speed_ctr_.Open(sample_rate,channels),return {});
+    return m_speed_ctr_.is_open();
 }
 
 template<typename T>
@@ -140,9 +149,12 @@ static inline int64_t Speed_Change_helper(const vector<uint8_t> &in, vector<uint
 
     CHECK_FALSE_(s.Send(reinterpret_cast<const T*>(in.data()),in_samples_num),return out_size);
 
-    auto need_sample{s.sonicSamplesAvailable()};
-    need_sample = need_sample < 0 ? 0 : need_sample;
+    auto need_sample{s.SamplesAvailable()};
+    if (need_sample < 0) {
+        need_sample = 0;
+    }
     //cerr << "need_sample = " << need_sample << "\n";
+    out.clear();
     out.resize(need_sample * channels * sizeof(T));
 
     out_size = s.Receive(reinterpret_cast<T*>(out.data()),need_sample);
@@ -160,9 +172,10 @@ int64_t XAudio_Play::Speed_Change(data_buffer_t &in,data_buffer_t &out) {
 
     CHECK_FALSE_(!in.empty(),return out_size);
 
-    if (1.0f != m_speed_) {
+    static constexpr auto normal_speed{1.0f};
 
-        using Speed_Change_type = int64_t(*)(const vector<uint8_t> &,vector<uint8_t> &,
+    if (normal_speed != m_speed_) {
+        using Speed_Change_type = int64_t(*)(const data_buffer_t &,data_buffer_t &,
                 Audio_Playback_Speed &);
 
         static constexpr pair<ENUM_AUDIO_FMT(XAudio),Speed_Change_type> list[]{
@@ -194,7 +207,7 @@ int64_t XAudio_Play::Speed_Change(data_buffer_t &in,data_buffer_t &out) {
 }
 
 void XAudio_Play::set_speed(const double &s) {
-    if(m_init_speed_ctr_){
+    if(m_speed_ctr_){
         m_speed_ = s < 0.1 ? 0.1f : static_cast<float>(s);
         m_speed_ctr_.Set_Speed(m_speed_);
     }

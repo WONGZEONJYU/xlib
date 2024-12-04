@@ -26,9 +26,20 @@ void XThread::_stop_() {
     ss << GET_STR(thread index:) << " "<<  m_index_ << " " << GET_STR(begin stop!) << " ";
     LOG_INFO(ss.str());
     ss.clear();
+    _exit_();
+    _wait_();
+    ss << GET_STR(thread index:) << " "<<  m_index_ << " " << GET_STR(end stop!) << " ";
+    LOG_INFO(ss.str());
+}
+
+void XThread::_exit_() {
+    stringstream ss;
+    ss << GET_STR(thread index:) << " "<<  m_index_ << " " << GET_STR(begin exit!) << " ";
+    LOG_INFO(ss.str());
+    ss.clear();
     m_is_exit_ = true;
     m_next_ = {};
-    ss << GET_STR(thread index:) << " "<<  m_index_ << " " << GET_STR(end stop!) << " ";
+    ss << GET_STR(thread index:) << " "<<  m_index_ << " " << GET_STR(end exit!) << " ";
     LOG_INFO(ss.str());
 }
 
@@ -59,13 +70,16 @@ void XThread::Stop() {
     _stop_();
 }
 
+void XThread::Exit() {
+    _exit_();
+}
+
 void XThread::Wait() {
     _wait_();
 }
 
 XThread::~XThread() {
     _stop_();
-    _wait_();
 }
 
 XAVPacket_sp XAVPacketList::Pop() {

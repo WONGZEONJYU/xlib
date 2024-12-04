@@ -282,8 +282,8 @@ public:
     }
 
     constexpr inline void destroy(){
-        if (!m_is_destroy){
-            m_is_destroy = true;
+        if (!m_is_destroy_){
+            m_is_destroy_ = true;
             m_f2();
         }
     }
@@ -294,7 +294,7 @@ public:
 
 private:
     F2 m_f2{};
-    std::atomic_bool m_is_destroy{};
+    std::atomic_bool m_is_destroy_{};
     X_DISABLE_COPY(XRAII)
 };
 

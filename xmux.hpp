@@ -5,8 +5,6 @@
 
 class XLIB_API XMux final : public XFormat{
 
-    [[maybe_unused]] void destroy();
-
 public:
     /**
      * 创建并打开复用器
@@ -35,7 +33,10 @@ public:
      * @param tb
      */
     void set_video_time_base(const AVRational &tb);
+    void set_video_time_base(const XRational &tb);
+
     void set_audio_time_base(const AVRational &tb);
+    void set_audio_time_base(const XRational &tb);
 
     /**
      * 写入头部信息
@@ -49,6 +50,7 @@ public:
      * @return ture or false
      */
     bool Write(XAVPacket &packet);
+    bool Write(XAVPacket *packet);
 
     /**
      * 写入尾部信息
@@ -57,18 +59,13 @@ public:
     bool WriteEnd();
 
 private:
-#if 1
     XRational m_src_video_time_base_,
             m_src_audio_time_base_;
-#else
-    AVRational *m_src_video_time_base_{},
-                *m_src_audio_time_base_{};
-#endif
     std::atomic_int64_t m_src_begin_video_pts_{-1},
             m_src_begin_audio_pts_{-1};
 public:
     explicit XMux() = default;
-    ~XMux() override;
+    ~XMux() override = default;
     X_DISABLE_COPY_MOVE(XMux)
 };
 

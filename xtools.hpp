@@ -7,6 +7,7 @@ class XLIB_API XThread {
     virtual void Main() = 0;
     void _stop_();
     void _wait_();
+    void _exit_();
 public:
     /**
      * 休眠
@@ -20,9 +21,14 @@ public:
     virtual void Start();
 
     /**
-     * 停止线程
+     * 退出线程,并回收线程
      */
     virtual void Stop();
+
+    /**
+     * 退出线程,不回收
+     */
+    virtual void Exit();
 
     /**
      * 回收线程
@@ -48,9 +54,9 @@ public:
 
     /**
      * 执行任务,用户如有需要则自行重写该函数
-     * @param XAVPacket &
+     * @param pkt
      */
-    virtual void Do(XAVPacket &){}
+    virtual void Do(XAVPacket &pkt){}
 
     virtual void pause(const bool &b){
         m_is_pause_ = b;

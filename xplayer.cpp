@@ -62,10 +62,10 @@ bool XPlayer::Open(const std::string &url, callable &&ex_func) {
 }
 
 void XPlayer::Stop() {
-    XThread::Stop();
-    m_demuxTask_.Stop();
-    m_video_decode_task_.Stop();
-    m_audio_decode_task_.Stop();
+    XThread::Exit();
+    m_demuxTask_.Exit();
+    m_video_decode_task_.Exit();
+    m_audio_decode_task_.Exit();
     Wait();
     m_demuxTask_.Wait();
     m_video_decode_task_.Wait();

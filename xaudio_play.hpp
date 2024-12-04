@@ -15,6 +15,11 @@ struct XSwrParam;
 
 class XLIB_API XAudio_Play {
     X_DISABLE_COPY_MOVE(XAudio_Play)
+
+    /**
+     * 回调拉取函数,不一定使用,可以不重写
+     */
+    virtual void Callback(uint8_t *,const int &) {}
 protected:
     using data_buffer_t = std::vector<uint8_t>;
 private:
@@ -60,6 +65,7 @@ public:
      * @param frame
      */
     void Push(const XAVFrame &frame);
+    void Push(const XAVFrame *frame);
 
     [[maybe_unused]] inline void set_volume(const int &volume) {
         m_volume_ = volume;
@@ -83,7 +89,7 @@ public:
      * @param time_base
      */
     void set_time_base(const double &time_base) {
-        m_time_base_ = time_base;
+        m_time_base_ = time_base > 0 ? time_base : 1.0;
     }
 
     /**
@@ -94,16 +100,12 @@ public:
 protected:
     explicit XAudio_Play() = default;
 
+    /**
+     * 与Callback相配合
+     */
     static void AudioCallback(void *,uint8_t * ,int);
 
-    virtual void Callback(uint8_t *,const int &) {}
-
     int64_t Speed_Change(data_buffer_t &,data_buffer_t &);
-    /**
-     * 重采样初始化,本库暂时没有使用到
-     * @return ture or false
-     */
-    [[maybe_unused]] bool init_swr(const XSwrParam &);
 
     [[maybe_unused]] bool init_speed_ctr(const int &sample_rate,
                                          const int &channels);
@@ -112,14 +114,12 @@ protected:
     std::list<XAudio_Data> m_datum_;
     std::atomic_int m_volume_{128};
     XAudioSpec m_spec_{};
-    std::atomic<double> m_time_base_{};
+    std::atomic<double> m_time_base_{1.0};
     std::atomic<float> m_speed_{1.0f};
 
 private:
     Audio_Playback_Speed m_speed_ctr_;
-    XSwrSample_sp m_swr_;
     XCodecParameters m_ff_audio_parameters_;
-    std::atomic_bool m_init_speed_ctr_{};
 };
 
 #define xAudio() XAudio_Play::instance()

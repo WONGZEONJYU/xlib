@@ -5,9 +5,12 @@ extern "C"{
 #include "xavpacket.hpp"
 #include "xcodec_parameters.hpp"
 
-AVFormatContext *XMux::Open(const std::string &url,
+using namespace std;
+
+AVFormatContext *XMux::Open(const string &url,
                             const XCodecParameters& video_parm,
                             const XCodecParameters& audio_parm) {
+
     CHECK_FALSE_(!url.empty(),PRINT_ERR_TIPS(GET_STR(url is empty!));
     return {});
 
@@ -42,7 +45,7 @@ AVFormatContext *XMux::Open(const std::string &url,
     return c;
 }
 
-AVFormatContext *XMux::Open(const std::string &url,
+AVFormatContext *XMux::Open(const string &url,
                             const XCodecParameters* video_parm,
                             const XCodecParameters* audio_parm) {
 
@@ -51,38 +54,28 @@ AVFormatContext *XMux::Open(const std::string &url,
 }
 
 void XMux::set_video_time_base(const AVRational &tb){
-    std::unique_lock locker(m_mux_);
-#if 1
-    m_src_video_time_base_ = {tb.num,tb.den};
-#else
+    set_video_time_base(XRational{tb.num,tb.den});
+}
 
-    if (!m_src_video_time_base_){
-        m_src_video_time_base_ = new AVRational{};
-    }
-    *m_src_video_time_base_ = tb;
-#endif
+void XMux::set_video_time_base(const XRational &tb) {
+    unique_lock locker(m_mux_);
+    m_src_video_time_base_ = tb;
 }
 
 void XMux::set_audio_time_base(const AVRational &tb){
-    std::unique_lock locker(m_mux_);
-#if 1
-    m_src_audio_time_base_ = {tb.num,tb.den};
-#else
+    set_audio_time_base(XRational{tb.num,tb.den});
+}
 
-    if (!m_src_audio_time_base_){
-        m_src_audio_time_base_ = new AVRational{};
-    }
-    *m_src_audio_time_base_ = tb;
-#endif
-
+void XMux::set_audio_time_base(const XRational &tb) {
+    unique_lock locker(m_mux_);
+    m_src_audio_time_base_ = tb;
 }
 
 bool XMux::WriteHead(){
     check_fmt_ctx();
-    FF_ERR_OUT(avformat_write_header(m_fmt_ctx_, nullptr),return {});
+    FF_ERR_OUT(avformat_write_header(m_fmt_ctx_,nullptr),return {});
     av_dump_format(m_fmt_ctx_,0, m_fmt_ctx_->url,1);
-    m_src_begin_video_pts_ = -1;
-    m_src_begin_audio_pts_ = -1;
+    m_src_begin_video_pts_ = m_src_begin_audio_pts_ = -1;
     return true;
 }
 
@@ -90,6 +83,7 @@ bool XMux::Write(XAVPacket &packet){
     if (!packet.data){
         return {};
     }
+
     check_fmt_ctx();
 
     //没读取到pts 重构考虑通过duration计算
@@ -102,47 +96,46 @@ bool XMux::Write(XAVPacket &packet){
         if (m_src_begin_video_pts_ < 0){
             m_src_begin_video_pts_ = packet.pts;
         }
-        locker.unlock();
-#if 1
+
+        const XRAII r([&] {
+            locker.unlock();
+        },[&] {
+            locker.lock();
+        });
+
         RescaleTime(packet,m_src_begin_video_pts_,m_src_video_time_base_);
-#else
-        RescaleTime(packet,m_src_begin_video_pts_,*m_src_video_time_base_);
-#endif
-        locker.lock();
+
     } else if (m_audio_index_ == packet.stream_index){
         if (m_src_begin_audio_pts_ < 0){
             m_src_begin_audio_pts_ = packet.pts;
         }
-        locker.unlock();
-#if 1
+
+        const XRAII r([&] {
+            locker.unlock();
+        },[&] {
+            locker.lock();
+        });
+
         RescaleTime(packet,m_src_begin_audio_pts_,m_src_audio_time_base_);
-#else
-        RescaleTime(packet,m_src_begin_audio_pts_,*m_src_audio_time_base_);
-#endif
-        locker.lock();
+
     }else{}
-    std::cout << packet.pts << std::flush;
+
+    cout << "Write pts = " << packet.pts << flush;
     FF_ERR_OUT(av_interleaved_write_frame(m_fmt_ctx_,&packet),return {});
     return true;
 }
 
+bool XMux::Write(XAVPacket *packet) {
+    if (!packet) {
+        return {};
+    }
+    return Write(*packet);
+}
+
 bool XMux::WriteEnd(){
     check_fmt_ctx();
-    av_interleaved_write_frame(m_fmt_ctx_, nullptr);
+    FF_ERR_OUT(av_interleaved_write_frame(m_fmt_ctx_, nullptr)); //写入缓冲
     FF_ERR_OUT(av_write_trailer(m_fmt_ctx_),return {});
+    m_src_begin_video_pts_ = m_src_begin_audio_pts_ = -1;
     return true;
-}
-
-void XMux::destroy(){
-#if 0
-    std::unique_lock locker(m_mux_);
-    delete m_src_video_time_base_;
-    m_src_video_time_base_ = nullptr;
-    delete m_src_audio_time_base_;
-    m_src_audio_time_base_ = nullptr;
-#endif
-}
-
-XMux::~XMux(){
-    destroy();
 }

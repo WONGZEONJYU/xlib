@@ -128,6 +128,7 @@ public:
 private:
     void Callback(uint8_t * const stream,const int &len) override {
 
+        using XHelper::Get_time_ms;
         fill_n(stream,len,0);
 
         uint64_t need_size{static_cast<decltype(need_size)>(len)}, //需要处理的大小
@@ -138,7 +139,7 @@ private:
             return;
         }
 
-        m_last_ms_ = XHelper::Get_time_ms();
+        m_last_ms_ = Get_time_ms();
         m_curr_pts_ = m_datum_.front().m_pts;//当前播放的PTS
 
         while (mixed_size < len) {
@@ -149,7 +150,6 @@ private:
 
             auto &[buf,offset,pts]{m_datum_.front()};
             auto size{buf.size() - offset};
-            //auto size{out.size() - in.m_offset};
 
             if (size > need_size) {
                 size = need_size;

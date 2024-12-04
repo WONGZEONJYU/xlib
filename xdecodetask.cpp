@@ -30,7 +30,7 @@ void XDecodeTask::Do(XAVPacket &pkt) {
 
     while (m_block_size > 0 && !is_exit()) {
         if (m_pkt_list_.Size() > m_block_size) {
-            sleep_for(1ms);
+            MSleep(1);
             continue;
         }
         break;
@@ -147,9 +147,7 @@ void XDecodeTask::Stop() {
     m_sync_pts_ = -1;
     m_block_size = -1;
     m_curr_pts = -1;
-    m_pkt_list_.Clear();
-    unique_lock locker(m_mutex_);
-    m_frames_.clear();
+    Clear();
 }
 
 void XDecodeTask::Clear(){
@@ -159,7 +157,6 @@ void XDecodeTask::Clear(){
     }
     m_pkt_list_.Clear();
     m_decode_.Clear();
-    m_curr_pts = -1;
 }
 
 XAVFrame_sp XDecodeTask::CopyFrame() {
