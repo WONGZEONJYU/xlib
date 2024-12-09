@@ -132,7 +132,7 @@ void SonicPrivate::scaleSamples(int16_t *samples,
         }else if(value < -32767) {
             value = -32767;
         }else{}
-        samples[i] = static_cast<int16_t>(value);;
+        samples[i] = static_cast<int16_t>(value);
     }
 }
 
@@ -777,7 +777,7 @@ int SonicPrivate::findSincCoefficient(const int &i,
     const auto leftVal{sincTable[left]},
                 rightVal{sincTable[right]};
 
-    return (leftVal * (width - position) + rightVal * position << 1) / width;
+    return ((leftVal * (width - position) + rightVal * position) << 1) / width;
 }
 
 int16_t SonicPrivate::interpolate(const int16_t *in,
