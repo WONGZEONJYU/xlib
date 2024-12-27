@@ -42,7 +42,7 @@ XSwscale::~XSwscale() {
     DeConstruct();
 }
 
-bool XSwscale::reinit(const int &srcW,const int &srcH,const int &srcFormat,
+[[maybe_unused]] bool XSwscale::reinit(const int &srcW,const int &srcH,const int &srcFormat,
                         const int &dstW,const int &dstH,const int &dstFormat,
                         const int &flags,
                         SwsFilter *srcFilter,SwsFilter *dstFilter,
@@ -57,7 +57,7 @@ XSwscale_sp newXSwscale() {
     return obj;
 }
 
-XSwscale_sp newXSwscale(const int &srcW,const int &srcH,const int &srcFormat,
+[[maybe_unused]] XSwscale_sp newXSwscale(const int &srcW,const int &srcH,const int &srcFormat,
                                     const int &dstW,const int &dstH, const int &dstFormat,
                                     const int &flags,
                                     SwsFilter *srcFilter, SwsFilter *dstFilter,

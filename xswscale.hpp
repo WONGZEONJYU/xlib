@@ -26,7 +26,7 @@ public:
               uint8_t *const *dst,
               const int *dstStride) const noexcept(true) ;
 
-    [[nodiscard]] bool reinit(const int &srcW,
+    [[maybe_unused]] [[nodiscard]] bool reinit(const int &srcW,
                 const int &srcH,
                 const int &srcFormat,
                 const int &dstW,
@@ -41,6 +41,7 @@ private:
 
 public:
     friend XLIB_API XSwscale_sp newXSwscale();
+
     friend XLIB_API XSwscale_sp newXSwscale(const int &srcW,
                                 const int &srcH,
                                 const int &srcFormat,
@@ -56,7 +57,7 @@ public:
 };
 
 XLIB_API XSwscale_sp newXSwscale();
-XLIB_API XSwscale_sp newXSwscale(const int &srcW,
+[[maybe_unused]] XLIB_API XSwscale_sp newXSwscale(const int &srcW,
                             const int &srcH,
                             const int &srcFormat,
                             const int &dstW,

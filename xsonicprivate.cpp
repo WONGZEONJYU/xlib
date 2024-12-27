@@ -116,7 +116,7 @@ void SonicPrivate::Close(){
     m_outputBuffer_.clear();
     m_pitchBuffer_.clear();
     m_downSampleBuffer_.clear();
-    d= {};
+    d = {};
 }
 
 void SonicPrivate::scaleSamples(int16_t *samples,
