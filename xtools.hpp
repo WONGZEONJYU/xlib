@@ -38,7 +38,7 @@ public:
      * 设置责任链下一个节点(线程安全)
      * @param xt
      */
-    void set_next(XThread *xt){
+    void set_next(XThread * const xt){
         m_next_ = xt;
     }
 
