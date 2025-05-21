@@ -3,6 +3,7 @@ project(xlib)
 
 add_definitions(-DUNICODE -D_UNICODE)
 
+set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 20)
 
 add_definitions(-D__STDC_CONSTANT_MACROS)

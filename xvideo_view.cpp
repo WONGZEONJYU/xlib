@@ -22,7 +22,7 @@ void XVideoView::merge_nv12(uint8_t *const cache_,const XAVFrame &frame){
         copy_n(src_,cp_uv_size,dst_) ; //UV
     }else { //有对齐情况
         for (int i {}; i < frame.height; ++i) { //Y
-            const auto src_ {frame.data[0] + frame.linesize[0] * i},
+            const auto src_{frame.data[0] + frame.linesize[0] * i},
                     dst_{cache_ + frame.width * i};
             copy_n(src_,frame.width,dst_);
         }
